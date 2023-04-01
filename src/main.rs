@@ -19,7 +19,12 @@ fn main() {
 
     let (tx, rx) = mpsc::channel();
 
-    let _ = thread::spawn(move || search_files(&start_dir, &search_pattern, &tx));
+    {
+        let tx = tx.clone();
+        thread::spawn(move || search_files(&start_dir, &search_pattern, &tx));
+    }
+
+    drop(tx);
 
     for result in rx {
         match result {
@@ -63,11 +68,6 @@ fn search_files<P: AsRef<Path>>(dir: P, search_pattern: &str,  tx: &mpsc::Sender
             let search_pattern_clone = search_pattern.to_owned();
             let _ = thread::spawn(move || search_files(&path_clone, &search_pattern_clone, &tx_clone));
         }
-        
-    }
-
-    if dir.as_ref() == Path::new(".") {
-        drop(tx);
     }
 }
 
