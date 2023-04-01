@@ -27,10 +27,14 @@ fn search_files<P: AsRef<Path>>(dir: P, search_pattern: &str) -> Result<(), std:
     for entry_result in entries {
         let entry = entry_result?;
         let path = entry.path();
-        let file_name = path.file_name().unwrap().to_string_lossy();
-
-        if file_name.contains(search_pattern) {
-            println!("{}", path.display());
+        match path.file_name() {
+            Some(file_name_os) => {
+                let file_name = file_name_os.to_string_lossy();
+                if file_name.contains(search_pattern) {
+                    println!("{}", path.display());
+                }
+            },
+            None => eprintln!("Failed to get file_name from entry_path: {}", path.display())
         }
 
         if path.is_dir() {
