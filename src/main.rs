@@ -5,6 +5,8 @@ use std::sync::Arc;
 use std::path::{Path, PathBuf};
 use tokio::task;
 use tokio::sync::Semaphore;
+use serde::{Deserialize, Serialize};
+use std::env;
 
 async fn search_files_in_directory(dir: PathBuf, file_name_pattern: String, semaphore: Arc<Semaphore>) -> io::Result<Vec<PathBuf>> {
     let _permit = semaphore.acquire().await;
@@ -36,18 +38,20 @@ fn find_files_recursively(dir: &Path, file_name_pattern: &str, semaphore: Arc<Se
     Ok(result)
 }
 
-#[derive(Parser, Debug)]
-#[command(author, version, about)]
-struct Cli {
-    /// The file name pattern to search for
-    file_name_pattern: String,
-    /// The start directory for the search, default_value="."
-    start_directory: Option<String>,
+#[derive(Debug, Deserialize, Serialize)]
+struct Config {
+    max_concurrent_threads: usize,
 }
 
-#[tokio::main]
-async fn main() {
-    let args = Cli::parse();
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            max_concurrent_threads: 4,
+        }
+    }
+}
+
+async fn run(args: Cli, config: Config) -> io::Result<()> {
     let start_directory = PathBuf::from(match args.start_directory {
         Some(dir) => dir,
         None => ".".to_string(),
@@ -55,11 +59,10 @@ async fn main() {
 
     if !start_directory.is_dir() {
         eprintln!("Error: '{}' is not a directory.", start_directory.display());
-        return;
+        return Ok(());
     }
 
-    let max_concurrent_threads = 4;
-    let semaphore = Arc::new(Semaphore::new(max_concurrent_threads));
+    let semaphore = Arc::new(Semaphore::new(config.max_concurrent_threads));
 
     match search_files_in_directory(start_directory, args.file_name_pattern, semaphore).await {
         Ok(found_files) => {
@@ -75,5 +78,30 @@ async fn main() {
         Err(e) => {
             eprintln!("Error: {}", e);
         }
+    }
+
+    Ok(())
+}
+
+#[derive(Parser, Debug)]
+#[command(author, version, about)]
+struct Cli {
+    /// The file name pattern to search for
+    file_name_pattern: String,
+    /// The start directory for the search, default_value="."
+    start_directory: Option<String>,
+}
+
+#[tokio::main]
+async fn main() {
+    let args = Cli::parse();
+
+    let exe_path = env::current_exe().expect("Failed to get the path of the executable");
+    let exe_dir = exe_path.parent().expect("Failed to get the directory of the executable");
+    let config_file = exe_dir.join("config.toml");
+    let config: Config = confy::load_path(&config_file).expect("Failed to load configuration");
+
+    if let Err(e) = run(args, config).await {
+        eprintln!("Error: {}", e);
     }
 }
