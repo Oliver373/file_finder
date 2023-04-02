@@ -1,1 +1,2 @@
 max_concurrent_threads = 2
+max_depth = 8
