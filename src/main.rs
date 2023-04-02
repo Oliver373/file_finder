@@ -1,10 +1,38 @@
 use std::env;
 use std::fs;
-use std::path::Path;
-use std::sync::mpsc;
-use std::thread;
+use std::io;
+use std::path::PathBuf;
+use tokio::task;
 
-fn main() {
+async fn search_files_in_directory(dir: PathBuf, search_name: String) -> io::Result<Vec<PathBuf>> {
+    task::spawn_blocking(move || search_files_in_directory_sync(&dir, &search_name)).await.unwrap()
+}
+
+fn search_files_in_directory_sync(dir: &PathBuf, search_name: &str) -> io::Result<Vec<PathBuf>> {
+    let mut result = Vec::new();
+
+    let entries = fs::read_dir(dir)?;
+
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        let file_name = entry.file_name();
+
+        if file_name.to_string_lossy().contains(search_name) {
+            result.push(path.clone());
+        }
+
+        if path.is_dir() {
+            let found_files = search_files_in_directory_sync(&path, search_name)?;
+            result.extend(found_files);
+        }
+    }
+
+    Ok(result)
+}
+
+#[tokio::main]
+async fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         println!("Usage: {} <search_pattern> [start_directory]", args[0]);
@@ -15,59 +43,26 @@ fn main() {
     }
 
     let search_pattern = args[1].clone();
-    let start_dir = if args.len() > 2 { args[2].clone() } else { ".".to_string() };
+    let search_directory = PathBuf::from(if args.len() > 2 { &args[2] } else { "." });
 
-    let (tx, rx) = mpsc::channel();
-
-    {
-        let tx = tx.clone();
-        thread::spawn(move || search_files(&start_dir, &search_pattern, &tx));
+    if !search_directory.is_dir() {
+        eprintln!("Error: '{}' is not a directory.", search_directory.display());
+        return;
     }
 
-    drop(tx);
-
-    for result in rx {
-        match result {
-            Ok(path) => println!("{}", path),
-            Err(e) => eprintln!("Error: {}", e),
-        }
-    }
-}
-
-fn search_files<P: AsRef<Path>>(dir: P, search_pattern: &str,  tx: &mpsc::Sender<Result<String, std::io::Error>>) {
-    let entries = match fs::read_dir(&dir) {
-        Ok(entries) => entries,
-        Err(e) => {
-            let _ = tx.send(Err(e));
-            return;
-        },
-    };
-
-    for entry_result in entries {
-        let entry = match entry_result {
-            Ok(entry) => entry,
-            Err(e) => {
-                let _ = tx.send(Err(e));
-                continue;
-            },
-        };
-        let path = entry.path();
-        match path.file_name() {
-            Some(file_name_os) => {
-                let file_name = file_name_os.to_string_lossy();
-                if file_name.contains(search_pattern) {
-                    let _ = tx.send(Ok(path.to_string_lossy().to_string()));
+    match search_files_in_directory(search_directory, search_pattern).await {
+        Ok(found_files) => {
+            if found_files.is_empty() {
+                println!("No files found.");
+            } else {
+                println!("Found {} files:", found_files.len());
+                for path in found_files {
+                    println!("{}", path.display());
                 }
-            },
-            None => eprintln!("Failed to get file_name from entry_path: {}", path.display())
+            }
         }
-
-        if path.is_dir() {
-            let tx_clone = mpsc::Sender::clone(tx);
-            let path_clone = path.clone();
-            let search_pattern_clone = search_pattern.to_owned();
-            let _ = thread::spawn(move || search_files(&path_clone, &search_pattern_clone, &tx_clone));
+        Err(e) => {
+            eprintln!("Error: {}", e);
         }
     }
 }
-
