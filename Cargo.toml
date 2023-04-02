@@ -1,9 +1,17 @@
 [package]
 name = "file_finder"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+authors = ["Oliver373 <hanyudong3000@qq.com>"]
+description = "A file finder utility to search for files with names containing the specified search pattern"
+license = "MIT"
+repository = "https://github.com/Oliver373/file_finder"
+keywords = ["file", "search", "finder"]
+categories = ["command-line-utilities"]
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
+clap = { version="4.2.1", features = ["derive"]}

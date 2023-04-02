@@ -1,4 +1,4 @@
-use std::env;
+use clap::Parser;
 use std::fs;
 use std::io;
 use std::sync::Arc;
@@ -36,29 +36,32 @@ fn find_files_recursively(dir: &Path, file_name_pattern: &str, semaphore: Arc<Se
     Ok(result)
 }
 
+#[derive(Parser, Debug)]
+#[command(author, version, about)]
+struct Cli {
+    /// The file name pattern to search for
+    file_name_pattern: String,
+    /// The start directory for the search, default_value="."
+    start_directory: Option<String>,
+}
+
 #[tokio::main]
 async fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        println!("Usage: {} <file_name_pattern> [start_directory]", args[0]);
-        println!("\nDescription:");
-        println!("  This program searches for files with names containing the specified file_name_pattern.");
-        println!("  If start_directory is not provided, the search starts from the current directory.");
-        return;
-    }
+    let args = Cli::parse();
+    let start_directory = PathBuf::from(match args.start_directory {
+        Some(dir) => dir,
+        None => ".".to_string(),
+    });
 
-    let file_name_pattern = args[1].clone();
-    let search_directory = PathBuf::from(if args.len() > 2 { &args[2] } else { "." });
-
-    if !search_directory.is_dir() {
-        eprintln!("Error: '{}' is not a directory.", search_directory.display());
+    if !start_directory.is_dir() {
+        eprintln!("Error: '{}' is not a directory.", start_directory.display());
         return;
     }
 
     let max_concurrent_threads = 4;
     let semaphore = Arc::new(Semaphore::new(max_concurrent_threads));
 
-    match search_files_in_directory(search_directory, file_name_pattern, semaphore).await {
+    match search_files_in_directory(start_directory, args.file_name_pattern, semaphore).await {
         Ok(found_files) => {
             if found_files.is_empty() {
                 println!("No files found.");
