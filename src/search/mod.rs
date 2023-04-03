@@ -9,20 +9,23 @@ use tokio::sync::Semaphore;
 use async_recursion::async_recursion;
 use tokio::sync::mpsc;
 
+type PathBufSender = mpsc::Sender<PathBuf>;
+// type PathBufReceiver = mpsc::Receiver<PathBuf>;
+
 /// `Search` struct is used to search for files in a directory that match a specific pattern.
 pub struct Search {
-    pub semaphore: Arc<Semaphore>,
-    pub max_depth: usize,
-    enable_semaphore: bool,
+    semaphore: Arc<Semaphore>,
+    max_depth: usize,
+    use_semaphore: bool,
 }
 
 impl Search {
     /// Creates a new `Search` instance with the specified maximum concurrent threads and maximum search depth.
-    pub fn new(max_concurrent_threads: usize, max_depth: usize, enable_semaphore: bool) -> Search {
+    pub fn new(max_concurrent_threads: usize, max_depth: usize, use_semaphore: bool) -> Search {
         Search {
             semaphore: Arc::new(Semaphore::new(max_concurrent_threads)),
             max_depth,
-            enable_semaphore
+            use_semaphore
         }
     }
 
@@ -33,7 +36,7 @@ impl Search {
         search_pattern: String,
     ) -> Result<Vec<PathBuf>, SearchError> {
         let (tx, mut rx) = mpsc::channel(self.semaphore.available_permits() as usize);
-        let _ = Self::find_files_recursively(dir, search_pattern, self.semaphore.clone(), 1, self.max_depth, tx, self.enable_semaphore).await?;
+        Self::find_files_recursively(dir, search_pattern, self.use_semaphore, self.semaphore.clone(), 1, self.max_depth, tx).await?;
         let mut result = Vec::new();
         while let Some(path) = rx.recv().await {
             result.push(path);
@@ -46,13 +49,13 @@ impl Search {
     async fn find_files_recursively(
         dir: PathBuf,
         search_pattern: String,
+        use_semaphore: bool,
         semaphore: Arc<Semaphore>,
         current_depth: usize,
         max_depth: usize,
-        tx: mpsc::Sender<PathBuf>,
-        enable_semaphore: bool,
+        tx: PathBufSender,
     ) -> Result<(), SearchError> {
-        if enable_semaphore {
+        if use_semaphore {
             let _permit = semaphore.acquire().await?;
         }
         let mut entries = fs::read_dir(&dir).await?;
@@ -72,7 +75,7 @@ impl Search {
                 let path_clone = path.clone();
                 let tx_clone = tx.clone();
     
-                let task = Self::find_files_recursively(path_clone, search_pattern_clone, semaphore_clone, current_depth + 1, max_depth, tx_clone, enable_semaphore);
+                let task = Self::find_files_recursively(path_clone, search_pattern_clone, use_semaphore, semaphore_clone, current_depth + 1, max_depth, tx_clone);
                 tokio::spawn(task);
             }
         }
