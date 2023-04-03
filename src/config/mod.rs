@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
-    pub open_concurrent_threads_number_control: bool,
+    pub enable_semaphore: bool,
     pub max_concurrent_threads: usize,
     pub max_depth: usize,
 }
@@ -10,7 +10,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            open_concurrent_threads_number_control: false,
+            enable_semaphore: false,
             max_concurrent_threads: 4,
             max_depth: 4,
         }
