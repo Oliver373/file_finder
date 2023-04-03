@@ -3,22 +3,20 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
-use tokio::{runtime::Handle, task};
+use async_recursion::async_recursion;
 
 pub async fn search_files_in_directory(
     dir: PathBuf,
     file_name_pattern: String,
-    semaphore: Arc<Semaphore>,
+    max_concurrent_threads: usize,
     max_depth: usize,
 ) -> io::Result<Vec<PathBuf>> {
-    let _permit = semaphore.acquire().await;
-    let semaphore_clone = semaphore.clone();
-    task::spawn_blocking(move || find_files_recursively(dir, file_name_pattern, semaphore_clone, 1, max_depth))
-        .await
-        .unwrap()
+    let semaphore = Arc::new(Semaphore::new(max_concurrent_threads));
+    find_files_recursively(dir, file_name_pattern, semaphore, 1, max_depth).await
 }
 
-fn find_files_recursively(
+#[async_recursion]
+async fn find_files_recursively(
     dir: PathBuf,
     file_name_pattern: String,
     semaphore: Arc<Semaphore>,
@@ -46,16 +44,13 @@ fn find_files_recursively(
             let file_name_pattern = file_name_pattern.clone();
             let path_clone = path.clone();
 
-            let task = task::spawn_blocking(move || {
-                find_files_recursively(path_clone, file_name_pattern, semaphore_clone, current_depth + 1, max_depth)
-            });
-
+            let task = find_files_recursively(path_clone, file_name_pattern, semaphore_clone, current_depth + 1, max_depth);
             tasks.push(task);
         }
     }
 
     for task in tasks {
-        let found_files = Handle::current().block_on(task)??;
+        let found_files = task.await?;
         result.extend_from_slice(&found_files);
     }
 

@@ -9,8 +9,6 @@ use search::search_files_in_directory;
 use std::env;
 use std::io;
 use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::Semaphore;
 use clap::Parser;
 
 async fn run(args: Cli, config: Config) -> io::Result<()> {
@@ -24,9 +22,7 @@ async fn run(args: Cli, config: Config) -> io::Result<()> {
         return Ok(());
     }
 
-    let semaphore = Arc::new(Semaphore::new(config.max_concurrent_threads));
-
-    match search_files_in_directory(start_directory, args.file_name_pattern, semaphore, config.max_depth).await {
+    match search_files_in_directory(start_directory, args.file_name_pattern, config.max_concurrent_threads, config.max_depth).await {
         Ok(found_files) => {
             if found_files.is_empty() {
                 println!("No files found.");
