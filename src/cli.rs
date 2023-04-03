@@ -7,4 +7,7 @@ pub struct Cli {
     pub file_name_pattern: String,
     /// The start directory for the search, default_value="."
     pub start_directory: Option<String>,
+    /// Use regex pattern
+    #[arg(short,long)]
+    pub regex: bool,
 }

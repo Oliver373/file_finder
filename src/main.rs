@@ -7,22 +7,17 @@ use config::Config;
 use search::Search;
 
 use std::env;
-use std::io;
 use std::path::PathBuf;
 use std::error::Error;
 use clap::Parser;
 
-async fn run(args: Cli, config: Config) -> io::Result<()> {
-    let start_directory = PathBuf::from(match args.start_directory {
-        Some(dir) => dir,
-        None => ".".to_string(),
-    });
+async fn run(args: Cli, config: Config) -> Result<(), Box<dyn Error>> {
+    let start_directory = PathBuf::from(args.start_directory.unwrap_or_else(|| ".".to_string()));
 
     if !start_directory.is_dir() {
-        eprintln!("Error: '{}' is not a directory.", start_directory.display());
-        return Ok(());
+        return Err(format!("Error: '{}' is not a directory.", start_directory.display()).into());
     }
-    let search = Search::new(config.max_concurrent_threads, config.max_depth, config.use_semaphore);
+    let search = Search::new(config.max_concurrent_threads, config.max_depth, config.use_semaphore, args.regex);
 
     match search.search_files_in_directory(start_directory, args.file_name_pattern).await {
         Ok(found_files) => {
@@ -52,10 +47,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let config_file = exe_dir.join("config.toml");
     let config: Config = confy::load_path(&config_file)?;
     println!("Config: {:?}", config);
+    println!("args: {:?}", args);
 
-    if let Err(e) = run(args, config).await {
-        eprintln!("Error: {}", e);
-    }
+    run(args, config).await?;
 
     Ok(())
 }
