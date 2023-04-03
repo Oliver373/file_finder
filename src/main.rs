@@ -21,8 +21,9 @@ async fn run(args: Cli, config: Config) -> io::Result<()> {
         eprintln!("Error: '{}' is not a directory.", start_directory.display());
         return Ok(());
     }
+    let search = Search::new(config.max_concurrent_threads, config.max_depth);
 
-    match Search::new(config.max_concurrent_threads, config.max_depth).search_files_in_directory(start_directory, args.file_name_pattern).await {
+    match search.search_files_in_directory(start_directory, args.file_name_pattern).await {
         Ok(found_files) => {
             if found_files.is_empty() {
                 println!("No files found.");
