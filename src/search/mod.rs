@@ -63,11 +63,16 @@ impl Search {
             }
         }
 
-        for task in tasks {
-            let found_files = task.await?;
-            result.extend_from_slice(&found_files);
+        let mut handles = Vec::new();
+        for task in tasks.into_iter() {
+            let handle = tokio::spawn(task);
+            handles.push(handle);
         }
 
+        for handle in handles {
+            let found_files = handle.await??;
+            result.extend_from_slice(&found_files);
+        }
         Ok(result)
     }
 }
