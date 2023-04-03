@@ -4,7 +4,7 @@ mod search;
 
 use cli::Cli;
 use config::Config;
-use search::search_files_in_directory;
+use search::Search;
 
 use std::env;
 use std::io;
@@ -22,7 +22,7 @@ async fn run(args: Cli, config: Config) -> io::Result<()> {
         return Ok(());
     }
 
-    match search_files_in_directory(start_directory, args.file_name_pattern, config.max_concurrent_threads, config.max_depth).await {
+    match Search::new(config.max_concurrent_threads, config.max_depth).search_files_in_directory(start_directory, args.file_name_pattern).await {
         Ok(found_files) => {
             if found_files.is_empty() {
                 println!("No files found.");
