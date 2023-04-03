@@ -1,9 +1,13 @@
-use std::io;
+mod error;
+
+use error::SearchError;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::Semaphore;
 use async_recursion::async_recursion;
+use tokio::sync::mpsc;
 
 /// `Search` struct is used to search for files in a directory that match a specific pattern.
 pub struct Search {
@@ -16,7 +20,7 @@ impl Search {
     pub fn new(max_concurrent_threads: usize, max_depth: usize) -> Search {
         Search {
             semaphore: Arc::new(Semaphore::new(max_concurrent_threads)),
-            max_depth: max_depth,
+            max_depth,
         }
     }
 
@@ -25,8 +29,14 @@ impl Search {
         &self,
         dir: PathBuf,
         search_pattern: String,
-    ) -> io::Result<Vec<PathBuf>> {
-        Self::find_files_recursively(dir, search_pattern, self.semaphore.clone(), 1, self.max_depth).await
+    ) -> Result<Vec<PathBuf>, SearchError> {
+        let (tx, mut rx) = mpsc::channel(self.semaphore.available_permits() as usize);
+        let _ = Self::find_files_recursively(dir, search_pattern, self.semaphore.clone(), 1, self.max_depth, tx).await?;
+        let mut result = Vec::new();
+        while let Some(path) = rx.recv().await {
+            result.push(path);
+        }
+        Ok(result)
     }
 
     /// Recursively searches for files in the given directory that match the search pattern.
@@ -37,42 +47,32 @@ impl Search {
         semaphore: Arc<Semaphore>,
         current_depth: usize,
         max_depth: usize,
-    ) -> io::Result<Vec<PathBuf>> {
-        let _permit = semaphore.acquire();
-        let mut result = Vec::new();
+        tx: mpsc::Sender<PathBuf>,
+    ) -> Result<(), SearchError> {
+        let _permit = semaphore.acquire().await?;
         let mut entries = fs::read_dir(&dir).await?;
-
-        let mut tasks = Vec::new();
-
+        
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
-
+    
             if let Some(file_name) = path.file_name().and_then(|os_str| os_str.to_str()) {
                 if file_name.contains(&search_pattern) {
-                    result.push(path.clone());
+                    tx.send(path.clone()).await?;
                 }
             }
-
+    
             if path.is_dir() && current_depth < max_depth {
                 let semaphore_clone = semaphore.clone();
                 let search_pattern_clone = search_pattern.clone();
                 let path_clone = path.clone();
-
-                let task = Self::find_files_recursively(path_clone, search_pattern_clone, semaphore_clone, current_depth + 1, max_depth);
-                tasks.push(task);
+                let tx_clone = tx.clone();
+    
+                let task = Self::find_files_recursively(path_clone, search_pattern_clone, semaphore_clone, current_depth + 1, max_depth, tx_clone);
+                tokio::spawn(task);
             }
         }
-
-        let mut handles = Vec::new();
-        for task in tasks.into_iter() {
-            let handle = tokio::spawn(task);
-            handles.push(handle);
-        }
-
-        for handle in handles {
-            let found_files = handle.await??;
-            result.extend_from_slice(&found_files);
-        }
-        Ok(result)
+    
+        Ok(())
     }
+    
 }

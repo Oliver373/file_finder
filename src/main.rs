@@ -52,6 +52,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let exe_dir = exe_path.parent().ok_or("Failed to get the directory of the executable")?;
     let config_file = exe_dir.join("config.toml");
     let config: Config = confy::load_path(&config_file)?;
+    println!("Config: {:?}", config);
 
     if let Err(e) = run(args, config).await {
         eprintln!("Error: {}", e);
