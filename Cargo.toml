@@ -1,6 +1,6 @@
 [package]
 name = "file_finder"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Oliver373 <hanyudong3000@qq.com>"]
 description = "A file finder utility to search for files with names containing the specified search pattern"
