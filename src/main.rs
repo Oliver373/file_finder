@@ -15,7 +15,7 @@ async fn run(args: Cli, config: Config) -> Result<(), Box<dyn Error>> {
     let start_directory = PathBuf::from(args.start_directory.unwrap_or_else(|| ".".to_string()));
 
     if !start_directory.is_dir() {
-        return Err(format!("Error: '{}' is not a directory.", start_directory.display()).into());
+        return Err(format!("Failed to start search: '{}' is not a directory.", start_directory.display()).into());
     }
     let search = Search::new(config.max_concurrent_threads, config.max_depth, config.use_semaphore, args.regex);
 

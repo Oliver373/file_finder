@@ -16,15 +16,19 @@ type PathBufSender = mpsc::Sender<PathBuf>;
 
 /// `Search` struct is used to search for files in a directory that match a specific pattern.
 pub struct Search {
+    // Inner state shared between instances and async tasks.
     inner: Arc<Inner>,
 }
 
-
-/// to void lifetime error
+// Holds shared state for the `Search` struct.
 struct Inner {
+    // Controls the maximum number of concurrent tasks.
     semaphore: Semaphore,
+    // Limits the search depth when searching directories recursively.
     max_depth: usize,
+    // Determines whether to use a semaphore to control concurrency.
     use_semaphore: bool,
+    // Determines whether to use regex for the search pattern.
     use_regex: bool,
 }
 
@@ -47,7 +51,7 @@ impl Search {
         dir: PathBuf,
         search_pattern: impl Into<String>,
     ) -> Result<Vec<PathBuf>, SearchError> {
-        let (tx, mut rx) = mpsc::channel(self.inner.semaphore.available_permits());
+        let (tx, mut rx) = mpsc::channel(self.inner.semaphore.available_permits() as usize);
         let pattern = SearchPattern::new(self.inner.use_regex, search_pattern)?;
         Self::find_files_recursively(self.inner.clone(), dir, pattern, 1, tx).await?;
         let mut result = Vec::new();
