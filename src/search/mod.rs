@@ -1,5 +1,7 @@
 mod error;
 mod pattern;
+#[cfg(test)]
+mod tests;
 
 use std::path::PathBuf;
 use std::sync::Arc;
